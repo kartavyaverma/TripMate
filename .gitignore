@@ -220,3 +220,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Excalidraw
+*.excalidraw
+*.exzcalidraw
+
+# Context documentation
+context.md

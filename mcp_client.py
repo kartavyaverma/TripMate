@@ -66,7 +66,7 @@ def _subprocess_env(**updates: str | None) -> dict[str, str]:
 # =========================================================
 
 llm = ChatGroq(
-    model="openai/gpt-oss-120b",
+    model="qwen/qwen3.6-27b",
     api_key=_require_env("GROQ_API_KEY", GROQ_API_KEY),
 )
 

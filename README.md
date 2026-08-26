@@ -10,7 +10,7 @@ TripMate AI is a state-of-the-art multi-agent travel-planning assistant built us
 *   **Supervisor Routing**: A central router dynamically selects which specialist agents are needed based on the user's request.
 *   **Input Guardrails**: Validates and filters out non-travel or potentially harmful user requests before they enter the planning graph.
 *   **Human-in-the-Loop (HITL)**: Pauses execution to allow users to review, edit, approve, or provide feedback on the draft itinerary before generating the final polished plan.
-*   **Live MCP Servers**: Integrates Tavily (web search), custom Weather servers, and AviationStack (flight schedules) via the Model Context Protocol.
+*   **Live MCP Servers**: Integrates Tavily (web search), remote OpenWeather servers, and AviationStack (flight schedules) via the Model Context Protocol.
 *   **Modern Web UI**: Clean, interactive glassmorphic UI for real-time collaboration with the planning workflow.
 
 ---
@@ -92,10 +92,11 @@ Create a `.env` file in the root directory and populate it with your API keys:
 # LLM Provider Key (Groq Llama-3.3-70b-versatile)
 GROQ_API_KEY="your-groq-api-key"
 
-# Live Search & Flight APIs
+# Live Search, Weather & Flight APIs
 TAVILY_API_KEY="your-tavily-api-key"
 AVIATIONSTACK_API_KEY="your-aviationstack-api-key"
 OPENWEATHER_API_KEY="your-openweather-api-key"
+OPENWEATHER_MCP_URL="" # Optional: Custom remote OpenWeather MCP server URL
 
 # LangGraph Checkpointer Database (PostgreSQL)
 DATABASE_URL="postgresql://username:password@localhost:5432/dbname"
@@ -117,12 +118,6 @@ LANGSMITH_PROJECT="Travel-Agent"
 uvicorn app:app --reload --host 127.0.0.1 --port 8000
 ```
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in your web browser.
-
-### 2. Running the Custom Weather MCP Server (Optional/Background)
-The Weather agent runs the local MCP weather server dynamically. If you want to run it manually or verify it works:
-```bash
-python custom_weather_mcp_server.py
-```
 
 ---
 

@@ -29,9 +29,10 @@ AVIATION_STACK_API_KEY = (
 )
 
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
+OPENWEATHER_MCP_URL = os.getenv("OPENWEATHER_MCP_URL")
+OPENWEATHER_MCP_TRANSPORT = os.getenv("OPENWEATHER_MCP_TRANSPORT", "streamable_http")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-WEATHER_SERVER_PATH = BASE_DIR / "custom_weather_mcp_server.py"
 UVX_COMMAND = shutil.which("uvx") or "uvx"
 
 
@@ -75,6 +76,17 @@ llm = ChatGroq(
 # MCP client
 # =========================================================
 
+# Build remote OpenWeather MCP URL
+_weather_url = OPENWEATHER_MCP_URL
+if _weather_url:
+    if OPENWEATHER_API_KEY and "?" not in _weather_url:
+        _weather_url = f"{_weather_url.rstrip('/')}/?apiKey={OPENWEATHER_API_KEY}"
+else:
+    _weather_url = (
+        f"https://mcp.openweather.org/mcp/"
+        f"?apiKey={OPENWEATHER_API_KEY or ''}"
+    )
+
 client = MultiServerMCPClient(
     {
         "tavily": {
@@ -98,19 +110,8 @@ client = MultiServerMCPClient(
         },
 
         "weather": {
-            "transport": "stdio",
-
-            # Uses the Python executable from the active Conda environment.
-            "command": sys.executable,
-
-            # Uses the weather server inside the current project folder.
-            "args": [
-                str(WEATHER_SERVER_PATH),
-            ],
-
-            "env": _subprocess_env(
-                OPENWEATHER_API_KEY=OPENWEATHER_API_KEY,
-            ),
+            "transport": OPENWEATHER_MCP_TRANSPORT,
+            "url": _weather_url,
         },
     }
 )
@@ -151,12 +152,6 @@ async def _get_server_tool(
             "OPENWEATHER_API_KEY",
             OPENWEATHER_API_KEY,
         )
-
-        if not WEATHER_SERVER_PATH.is_file():
-            raise FileNotFoundError(
-                f"Weather MCP server not found: "
-                f"{WEATHER_SERVER_PATH}"
-            )
 
     # Important: load only the requested MCP server.
     tools = await client.get_tools(
@@ -265,33 +260,96 @@ async def aviation_mcp_call(
 
 
 # =========================================================
-# Weather MCP
+# Weather MCP (Remote)
 # =========================================================
 
-async def weather_mcp_search(city: str):
-    weather_tool = await _get_server_tool(
-        "weather",
-        "get_current_weather",
+async def _find_weather_tool(candidates: list[str]):
+    tools = await client.get_tools(
+        server_name="weather",
     )
 
-    return await weather_tool.ainvoke(
-        {
-            "city": city,
-        }
+    for name in candidates:
+        tool = next(
+            (
+                t
+                for t in tools
+                if t.name.lower() == name.lower()
+            ),
+            None,
+        )
+        if tool:
+            return tool
+
+    if tools:
+        return tools[0]
+
+    raise RuntimeError(
+        "No tools available on remote weather MCP server."
     )
+
+
+def _prepare_weather_args(
+    tool: Any,
+    city: str,
+) -> dict[str, Any]:
+    schema_args = getattr(tool, "args", {}) or {}
+    if "city" in schema_args:
+        return {"city": city}
+    if "location" in schema_args:
+        return {"location": city}
+    if "q" in schema_args:
+        return {"q": city}
+    if "query" in schema_args:
+        return {"query": city}
+    return {"city": city}
+
+
+async def weather_mcp_search(city: str):
+    _require_env(
+        "OPENWEATHER_API_KEY",
+        OPENWEATHER_API_KEY,
+    )
+
+    tool = await _find_weather_tool(
+        [
+            "get_current_weather",
+            "get_weather",
+            "current_weather",
+            "weather",
+            "get_weather_data",
+        ]
+    )
+
+    args = _prepare_weather_args(
+        tool,
+        city,
+    )
+
+    return await tool.ainvoke(args)
 
 
 async def forecast_mcp_search(city: str):
-    forecast_tool = await _get_server_tool(
-        "weather",
-        "get_forecast",
+    _require_env(
+        "OPENWEATHER_API_KEY",
+        OPENWEATHER_API_KEY,
     )
 
-    return await forecast_tool.ainvoke(
-        {
-            "city": city,
-        }
+    tool = await _find_weather_tool(
+        [
+            "get_weather_forecast",
+            "get_forecast",
+            "forecast",
+            "get_five_day_forecast",
+            "five_day_forecast",
+        ]
     )
+
+    args = _prepare_weather_args(
+        tool,
+        city,
+    )
+
+    return await tool.ainvoke(args)
 
 
 # =========================================================

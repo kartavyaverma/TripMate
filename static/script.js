@@ -71,12 +71,15 @@ function showWorkflow(data) {
     chips.appendChild(chip);
   });
 
-  if (data.guardrail_allowed === false) {
+  guardrailBadge.classList.remove("blocked", "fallback");
+  if (data.guardrail_allowed === false || data.guardrail_status === "blocked") {
     guardrailBadge.textContent = "Guardrail blocked";
     guardrailBadge.classList.add("blocked");
+  } else if (data.guardrail_status === "fallback") {
+    guardrailBadge.textContent = "Guardrail fallback (monitored)";
+    guardrailBadge.classList.add("fallback");
   } else {
     guardrailBadge.textContent = "Guardrail passed";
-    guardrailBadge.classList.remove("blocked");
   }
 
   section.classList.remove("hidden");
@@ -101,17 +104,68 @@ function showResult(answer, threadId, isDraft = false) {
   });
 }
 
+let approvalTimer = null;
+const AUTO_APPROVE_TIMEOUT_SECONDS = 120;
+let secondsRemaining = AUTO_APPROVE_TIMEOUT_SECONDS;
+
+function formatTime(seconds) {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+}
+
+function startApprovalTimer() {
+  if (approvalTimer) {
+    clearInterval(approvalTimer);
+  }
+
+  secondsRemaining = AUTO_APPROVE_TIMEOUT_SECONDS;
+  const timerBadge = document.getElementById("approvalTimerBadge");
+
+  if (timerBadge) {
+    timerBadge.textContent = `⏱️ Auto-finalizes in ${formatTime(secondsRemaining)}`;
+    timerBadge.classList.remove("warning");
+  }
+
+  approvalTimer = setInterval(() => {
+    secondsRemaining--;
+
+    if (timerBadge) {
+      timerBadge.textContent = `⏱️ Auto-finalizes in ${formatTime(secondsRemaining)}`;
+
+      if (secondsRemaining <= 30) {
+        timerBadge.classList.add("warning");
+      } else {
+        timerBadge.classList.remove("warning");
+      }
+    }
+
+    if (secondsRemaining <= 0) {
+      clearInterval(approvalTimer);
+      approvalTimer = null;
+      console.log("2-minute HITL review timeout reached. Auto-approving draft itinerary as final...");
+      submitApproval(true, true);
+    }
+  }, 1000);
+}
+
 function showApproval(data) {
   waitingForApproval = true;
   const section = document.getElementById("approvalSection");
   const approvalRequest = document.getElementById("approvalRequest");
-  approvalRequest.textContent = data.approval_request ||
-    "Approve the draft or provide feedback before the final plan is generated.";
+  approvalRequest.textContent =
+    data.approval_request ||
+    "Approve the draft or provide feedback before the final plan is generated. If no action is taken within 2 minutes, the draft will automatically be finalized.";
   section.classList.remove("hidden");
+  startApprovalTimer();
 }
 
 function hideApproval() {
   waitingForApproval = false;
+  if (approvalTimer) {
+    clearInterval(approvalTimer);
+    approvalTimer = null;
+  }
   document.getElementById("approvalSection").classList.add("hidden");
   document.getElementById("approvalFeedback").value = "";
 }
@@ -171,8 +225,13 @@ async function sendMessage() {
   }
 }
 
-async function submitApproval(approved) {
+async function submitApproval(approved, isAuto = false) {
   hideError();
+
+  if (approvalTimer) {
+    clearInterval(approvalTimer);
+    approvalTimer = null;
+  }
 
   if (!currentThreadId || !waitingForApproval) {
     showError("There is no draft waiting for approval.");
@@ -180,7 +239,11 @@ async function submitApproval(approved) {
   }
 
   const feedbackInput = document.getElementById("approvalFeedback");
-  const feedback = feedbackInput.value.trim();
+  let feedback = feedbackInput.value.trim();
+
+  if (isAuto && !feedback) {
+    feedback = "Auto-approved: 2-minute review timeout elapsed. Finalizing draft itinerary.";
+  }
 
   if (!approved && !feedback) {
     showError("Please enter revision feedback before requesting changes.");

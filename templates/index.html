@@ -96,10 +96,15 @@
     <section id="approvalSection" class="approval-section hidden">
       <div class="approval-icon">👤</div>
       <div class="approval-content">
-        <span class="eyebrow">Human-in-the-Loop</span>
-        <h2>Review the draft itinerary</h2>
+        <div class="approval-header">
+          <div>
+            <span class="eyebrow">Human-in-the-Loop</span>
+            <h2>Review the draft itinerary</h2>
+          </div>
+          <span id="approvalTimerBadge" class="approval-timer-badge">⏱️ Auto-finalizes in 02:00</span>
+        </div>
         <p id="approvalRequest">
-          Approve the draft or provide feedback before the final plan is generated.
+          Approve the draft or provide feedback before the final plan is generated. If no action is taken within 2 minutes, the draft will automatically be finalized.
         </p>
 
         <textarea id="approvalFeedback" class="feedback-input"
